@@ -15,14 +15,14 @@ const loadWasmModule = async () => {
   return isOk ? mod : null;
 };
 
-function walk(node, scan_text) {
+function walk(node, scan_text_closure) {
   if (node.nodeType === Node.TEXT_NODE) {
-    const diagnostics = scan_text(node.textContent);
+    const diagnostics = scan_text_closure(node.textContent);
     if (diagnostics.length > 0) {
       highlightNode(node, diagnostics);
     }
   } else {
-    node.childNodes.forEach((node) => walk(node, scan_text));
+    node.childNodes.forEach((node) => walk(node, scan_text_closure));
   }
 }
 
