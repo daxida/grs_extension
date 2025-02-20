@@ -15,18 +15,18 @@ const loadWasmModule = async () => {
   return isOk ? mod : null;
 };
 
-function walk(node, scan_text_closure) {
+function walk(node, color, scan_text_closure) {
   if (node.nodeType === Node.TEXT_NODE) {
     const diagnostics = scan_text_closure(node.textContent);
     if (diagnostics.length > 0) {
-      highlightNode(node, diagnostics);
+      highlightNode(node, color, diagnostics);
     }
   } else {
-    node.childNodes.forEach((node) => walk(node, scan_text_closure));
+    node.childNodes.forEach((node) => walk(node, color, scan_text_closure));
   }
 }
 
-function highlightNode(node, diagnostics) {
+function highlightNode(node, color, diagnostics) {
   // Note that this whole highlight logic won't work well
   // if two diagnostic ranges happen to overlap.
   //
@@ -50,7 +50,7 @@ function highlightNode(node, diagnostics) {
     const kinds = kindArray.join(", ");
     const start = range.start + offset;
     const end = range.end + offset;
-    const highlightedText = `<span style="background-color: yellow;" title="${kinds}">${modifiedText.slice(start, end)}</span>`;
+    const highlightedText = `<span style="background-color: ${color};" title="${kinds}">${modifiedText.slice(start, end)}</span>`;
     modifiedText = modifiedText.slice(0, start) + highlightedText + modifiedText.slice(end);
     offset += highlightedText.length - (end - start);
   }
@@ -60,14 +60,26 @@ function highlightNode(node, diagnostics) {
   parent.replaceChild(tempElement, node);
 }
 
+// There must be sth better
+async function getColor() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get("selectedColor", (data) => {
+      resolve(data.selectedColor);
+    });
+  });
+}
+
 async function scanPage() {
   const mod = await loadWasmModule();
+  const color = await getColor();
 
   if (mod) {
+    console.log("Running scanPage with color: " + color);
+
     const { scan_text } = mod;
     const cnt = {};
 
-    walk(document.body, (textContent) => {
+    walk(document.body, color, (textContent) => {
       try {
         const diagnostics = scan_text(textContent);
         for (const { kind, range, fix } of diagnostics) {
@@ -84,11 +96,21 @@ async function scanPage() {
   }
 }
 
-// Allow to rescan when clicking on the extension button
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("Received message:", message);
+
   if (message.action === "runScan") {
-    scanPage();
+    console.log("Running scanPage...");
+    if (typeof scanPage === "function") {
+      scanPage();
+      sendResponse({ status: "Scan started" });
+    } else {
+      console.error("scanPage() is not defined!");
+      sendResponse({ status: "Error: scanPage() not found" });
+    }
   }
 });
+
+console.log("Content script loaded!");
 
 scanPage();
