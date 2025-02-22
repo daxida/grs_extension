@@ -15,14 +15,11 @@ const loadWasmModule = async () => {
   return isOk ? mod : null;
 };
 
-function walk(node, color, scan_text_closure) {
+function walk(node, iterNode) {
   if (node.nodeType === Node.TEXT_NODE) {
-    const diagnostics = scan_text_closure(node.textContent);
-    if (diagnostics.length > 0) {
-      highlightNode(node, color, diagnostics);
-    }
+    iterNode(node);
   } else {
-    node.childNodes.forEach((node) => walk(node, color, scan_text_closure));
+    node.childNodes.forEach((node) => walk(node, iterNode));
   }
 }
 
@@ -60,54 +57,75 @@ function highlightNode(node, color, diagnostics) {
   parent.replaceChild(tempElement, node);
 }
 
-// There must be sth better
-async function getColor() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get("selectedColor", (data) => {
-      resolve(data.selectedColor);
-    });
+async function scanPage() {
+  const mod = await loadWasmModule();
+  if (!mod) return;
+
+  chrome.storage.local.get("selectedColor", (data) => {
+    const color = data.selectedColor || "#FFFF00"; // Default to yellow if not set
+    scanPageGo(mod, color);
   });
 }
 
-async function scanPage() {
-  const mod = await loadWasmModule();
-  const color = await getColor();
+function scanPageGo(mod, color) {
+  console.log("Running scanPage with color: " + color);
 
-  if (mod) {
-    console.log("Running scanPage with color: " + color);
+  const { scan_text } = mod;
+  const cnt = {};
 
-    const { scan_text } = mod;
-    const cnt = {};
-
-    walk(document.body, color, (textContent) => {
-      try {
-        const diagnostics = scan_text(textContent);
-        for (const { kind, range, fix } of diagnostics) {
-          cnt[kind] = (cnt[kind] || 0) + 1;
-        }
-        return diagnostics;
-      } catch (e) {
-        console.log(e);
-        console.log("Failed with text " + textContent);
+  const iterNode = (node) => {
+    try {
+      const diagnostics = scan_text(node.textContent);
+      for (const { kind, range, fix } of diagnostics) {
+        cnt[kind] = (cnt[kind] || 0) + 1;
       }
-    });
-
-    console.log("Diagnostics counter: " + JSON.stringify(cnt));
+      if (diagnostics.length > 0) {
+        highlightNode(node, color, diagnostics);
+      }
+    } catch (e) {
+      console.log(e);
+      console.log("Failed with text " + textContent);
+    }
   }
+
+  walk(document.body, iterNode);
+
+  console.log("Diagnostics counter: " + JSON.stringify(cnt));
+}
+
+async function toMonotonic() {
+  const mod = await loadWasmModule();
+  if (!mod) return;
+  toMonotonicGo(mod);
+}
+
+function toMonotonicGo(mod) {
+  const { to_monotonic } = mod;
+  const iterNode = (node) => {
+    node.textContent = to_monotonic(node.textContent);
+  }
+  walk(document.body, iterNode);
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("Received message:", message);
 
-  if (message.action === "runScan") {
-    console.log("Running scanPage...");
-    if (typeof scanPage === "function") {
+  switch (message.action) {
+    case "runScan":
+      console.log("[L] Running scanPage...");
       scanPage();
       sendResponse({ status: "Scan started" });
-    } else {
-      console.error("scanPage() is not defined!");
-      sendResponse({ status: "Error: scanPage() not found" });
-    }
+      break;
+
+    case "runToMono":
+      console.log("[L] Running toMonotonicConversion...");
+      toMonotonic();
+      sendResponse({ status: "Monotonic conversion started" });
+      break;
+
+    default:
+      console.warn("[L] Unknown action received:", message.action);
+      sendResponse({ status: "Unknown action" });
   }
 });
 

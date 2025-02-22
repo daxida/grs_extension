@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', function() {
   const colorPicker = document.getElementById('color-picker');
+  const toMonotonicButton = document.getElementById("to-monotonic");
   let debounceTimer;
 
   // Load the stored color if it exists
@@ -16,7 +17,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs.length === 0) return;
-
       chrome.tabs.sendMessage(tabs[0].id, { action: "runScan" }, (response) => {
         if (chrome.runtime.lastError) {
           console.error("Error sending message:", JSON.stringify(chrome.runtime.lastError));
@@ -26,6 +26,19 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
   }
+
+  toMonotonicButton.addEventListener("click", () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs.length === 0) return;
+      chrome.tabs.sendMessage(tabs[0].id, { action: "runToMono" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("Error sending message:", JSON.stringify(chrome.runtime.lastError));
+        } else {
+          console.log("Scan triggered:", response?.status);
+        }
+      });
+    });
+  });
 
   colorPicker.addEventListener('input', function() {
     clearTimeout(debounceTimer);

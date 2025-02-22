@@ -5,7 +5,7 @@
     <style>
       body {
         font-family: Arial, sans-serif;
-        width: 100px;
+        width: 120px;
         padding: 10px;
       }
 
@@ -20,11 +20,21 @@
         margin: 0 auto;
         width: 90%;
       }
+
+      #to-monotonic {
+        display: block;
+        margin: 8px auto 0;
+        width: 90%;
+        padding: 5px;
+        font-size: 12px;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
     <span class="text">Settings:</span>
     <input type="color" id="color-picker" name="color-picker" value="#ff0000">
+    <button id="to-monotonic">To Monotonic</button>
 
     <script src="js/popup.js"></script>
   </body>
