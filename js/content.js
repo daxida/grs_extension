@@ -23,7 +23,7 @@ function walk(node, iterNode) {
   }
 }
 
-function highlightNode(node, color, diagnostics) {
+function groupDiagnostics(diagnostics) {
   // Note that this whole highlight logic won't work well
   // if two diagnostic ranges happen to overlap.
   //
@@ -31,23 +31,31 @@ function highlightNode(node, color, diagnostics) {
   //
   // (Partially) deal with overlap by highlighting once
   // but showing all kinds at that range.
-  const diagnosticsGrouped = new Map();
+  const grouped = new Map();
   for (const { kind, range, fix } of diagnostics) {
     const key = JSON.stringify(range);
-    if (!diagnosticsGrouped.has(key)) {
-      diagnosticsGrouped.set(key, []);
+    if (!grouped.has(key)) {
+      grouped.set(key, []);
     }
-    diagnosticsGrouped.get(key).push(kind);
+    grouped.get(key).push(kind);
   }
+  return grouped;
+}
 
+const SPAN_CLASS = "grs-highlight";
+
+function highlightNode(node, color, diagnostics) {
   let modifiedText = node.textContent;
   let offset = 0;
-  for (const [key, kindArray] of diagnosticsGrouped) {
+  for (const [key, kindArray] of groupDiagnostics(diagnostics)) {
     const range = JSON.parse(key);
     const kinds = kindArray.join(", ");
     const start = range.start + offset;
     const end = range.end + offset;
-    const highlightedText = `<span style="background-color: ${color};" title="${kinds}">${modifiedText.slice(start, end)}</span>`;
+
+    const style = `"background-color: ${color};"`;
+    const textSlice = modifiedText.slice(start, end);
+    const highlightedText = `<span class=${SPAN_CLASS} style=${style} title="${kinds}">${textSlice}</span>`;
     modifiedText = modifiedText.slice(0, start) + highlightedText + modifiedText.slice(end);
     offset += highlightedText.length - (end - start);
   }
@@ -55,6 +63,12 @@ function highlightNode(node, color, diagnostics) {
   const tempElement = document.createElement("span");
   tempElement.innerHTML = modifiedText;
   parent.replaceChild(tempElement, node);
+}
+
+function removeHighlights() {
+  document.querySelectorAll(`.${SPAN_CLASS}`).forEach(span => {
+    span.replaceWith(...span.childNodes);
+  });
 }
 
 async function scanPage() {
@@ -119,7 +133,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case "runToMono":
       console.log("[L] Running toMonotonicConversion...");
+      removeHighlights();
       toMonotonic();
+      scanPage();
       sendResponse({ status: "Monotonic conversion started" });
       break;
 
