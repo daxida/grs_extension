@@ -1,3 +1,17 @@
+const ALL_RULES = [
+  "MDA", // MissingDoubleAccents
+  "MAC", // MissingAccentCapital
+  "DW",  // DuplicatedWord
+  "AFN", // AddFinalN
+  "RFN", // RemoveFinalN
+  "OS",  // OutdatedSpelling
+  "MA",  // MonosyllableAccented
+  "MNA", // MultisyllableNotAccented
+  "MS",  // MixedScripts
+  "AC",  // AmbiguousChar
+];
+const DEFAULT_RULE_STATES = Object.fromEntries(ALL_RULES.map(rule => [rule, true]));
+
 const WASM_MOD_URL = chrome.runtime.getURL('pkg/grs_wasm.js');
 
 // Import Wasm module binding using dynamic import.
@@ -24,15 +38,12 @@ function walk(node, iterNode) {
 }
 
 function groupDiagnostics(diagnostics) {
-  // Note that this whole highlight logic won't work well
-  // if two diagnostic ranges happen to overlap.
+  // Note that the highlighting logic could fail if two diagnostic ranges overlap.
   //
-  // We can not simply iterate the diagnostics, instead...
-  //
-  // (Partially) deal with overlap by highlighting once
-  // but showing all kinds at that range.
+  // We can not simply iterate the diagnostics, instead we (partially) deal with 
+  // overlap by highlighting once but showing all kinds at that range.
   const grouped = new Map();
-  for (const { kind, range, fix } of diagnostics) {
+  for (const { kind, range } of diagnostics) {
     const key = JSON.stringify(range);
     if (!grouped.has(key)) {
       grouped.set(key, []);
@@ -59,10 +70,8 @@ function highlightNode(node, color, diagnostics) {
     modifiedText = modifiedText.slice(0, start) + highlightedText + modifiedText.slice(end);
     offset += highlightedText.length - (end - start);
   }
-  const parent = node.parentNode;
-  const tempElement = document.createElement("span");
-  tempElement.innerHTML = modifiedText;
-  parent.replaceChild(tempElement, node);
+  const fragment = document.createRange().createContextualFragment(modifiedText);
+  node.replaceWith(fragment);
 }
 
 // https://github.com/brandon1024/find/blob/42806fcc53e8843564ae463e6b246003d3d7a085/content/highlighter.js#L333
@@ -78,20 +87,6 @@ function removeHighlight() {
     parent.normalize();
   });
 }
-
-const ALL_RULES = [
-  "MDA", // MissingDoubleAccents
-  "MAC", // MissingAccentCapital
-  "DW",  // DuplicatedWord
-  "AFN", // AddFinalN
-  "RFN", // RemoveFinalN
-  "OS",  // OutdatedSpelling
-  "MA",  // MonosyllableAccented
-  "MNA", // MultisyllableNotAccented
-  "MS",  // MixedScripts
-  "AC",  // AmbiguousChar
-];
-const DEFAULT_RULE_STATES = Object.fromEntries(ALL_RULES.map(rule => [rule, true]));
 
 async function scanPage() {
   const mod = await loadWasmModule();
@@ -139,10 +134,7 @@ function scanPageGo(mod, color, ruleStates) {
 async function toMonotonic() {
   const mod = await loadWasmModule();
   if (!mod) return;
-  toMonotonicGo(mod);
-}
 
-function toMonotonicGo(mod) {
   const { to_monotonic } = mod;
   const iterNode = (node) => {
     node.textContent = to_monotonic(node.textContent);
@@ -150,7 +142,21 @@ function toMonotonicGo(mod) {
   walk(document.body, iterNode);
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+async function fixText() {
+  const mod = await loadWasmModule();
+  if (!mod) return;
+
+  chrome.storage.local.get(["ruleStates"], (data) => {
+    const ruleStates = data.ruleStates || DEFAULT_RULE_STATES;
+    const { fix } = mod;
+    const iterNode = (node) => {
+      node.textContent = fix(node.textContent, ruleStates);
+    }
+    walk(document.body, iterNode);
+  });
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   console.log("Received message:", message);
   console.log(`[L] Running ${message.action}...`);
 
@@ -163,6 +169,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case "runToMono":
       removeHighlight();
       toMonotonic();
+      scanPage();
+      break;
+
+    case "runFix":
+      removeHighlight();
+      fixText();
       scanPage();
       break;
 
@@ -179,5 +191,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 console.log("Content script loaded!");
-
+// chrome.storage.local.clear(); // For testing without cache
 scanPage();

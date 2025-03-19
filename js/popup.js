@@ -1,17 +1,27 @@
 // To inspect the console logs, one has to open the popup's devtools
 // (as opposed to the default webpage's devtools that is opened in chrome)
+const ALL_RULES = [
+  "MDA", // MissingDoubleAccents
+  "MAC", // MissingAccentCapital
+  "DW",  // DuplicatedWord
+  "AFN", // AddFinalN
+  "RFN", // RemoveFinalN
+  "OS",  // OutdatedSpelling
+  "MA",  // MonosyllableAccented
+  "MNA", // MultisyllableNotAccented
+  "MS",  // MixedScripts
+  "AC",  // AmbiguousChar
+];
+const DEFAULT_RULE_STATES = Object.fromEntries(ALL_RULES.map(rule => [rule, true]));
 
 function handleError(response) {
-  if (chrome.runtime.lastError) {
-    console.error("[POPUP] Error sending message:", JSON.stringify(chrome.runtime.lastError));
-  } else {
-    console.log("[POPUP] Scan triggered:", response?.status);
-  }
+  console.log("[POPUP] Response status:", response?.status);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
   const colorPicker = document.getElementById('color-picker');
-  const toMonotonicButton = document.getElementById("to-monotonic");
+  const toMonotonicButton = document.getElementById("to-monotonic-btn");
+  const fixButton = document.getElementById("fix-btn");
   const ruleButtons = document.getElementsByClassName("rule-btn");
   let debounceTimer;
 
@@ -46,18 +56,15 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // RULES
-  chrome.storage.local.get('ruleStates', function(result) {
-    const ruleStates = result.ruleStates || {};
-    Array.from(ruleButtons).forEach(button => {
-      const rule = button.dataset.rule;
-      if (ruleStates[rule] === false) {
-        button.classList.add("inactive");
-      }
+  // FIX
+  fixButton.addEventListener("click", () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs.length === 0) return;
+      chrome.tabs.sendMessage(tabs[0].id, { action: "runFix" }, handleError)
     });
   });
 
-  // Send the rule on the clicked button to content.js
+  // RULES
   Array.from(ruleButtons).forEach(button => {
     button.addEventListener("click", () => {
       const rule = button.dataset.rule;
@@ -65,11 +72,11 @@ document.addEventListener('DOMContentLoaded', function() {
       button.classList.toggle("inactive");
       // Get the current states from storage and update
       chrome.storage.local.get('ruleStates', function(result) {
-        const ruleStates = result.ruleStates || {};
+        const ruleStates = result.ruleStates || DEFAULT_RULE_STATES;
         ruleStates[rule] = !button.classList.contains("inactive");
         chrome.storage.local.set({ ruleStates: ruleStates });
       });
-      // Modify contents.js config and scan the page again. 
+      // Modify contents.js config and scan the page again.
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs.length === 0) return;
         chrome.tabs.sendMessage(tabs[0].id, { action: "setRule", rule: rule }, handleError);
