@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const scan_text: (a: number, b: number, c: any) => [number, number, number];
+export const fix: (a: number, b: number, c: any) => [number, number];
 export const tokenize: (a: number, b: number) => [number, number, number];
 export const to_monotonic: (a: number, b: number) => [number, number];
 export const syllabify: (a: number, b: number, c: number, d: number) => [number, number];

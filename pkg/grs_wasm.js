@@ -189,6 +189,26 @@ export function scan_text(text, options) {
 
 /**
  * @param {string} text
+ * @param {any} options
+ * @returns {string}
+ */
+export function fix(text, options) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.fix(ptr0, len0, options);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * @param {string} text
  * @returns {any}
  */
 export function tokenize(text) {

@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export function scan_text(text: string, options: any): any;
+export function fix(text: string, options: any): string;
 export function tokenize(text: string): any;
 export function to_monotonic(text: string): string;
 export function syllabify(text: string, separator: string): string;
@@ -32,6 +33,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly scan_text: (a: number, b: number, c: any) => [number, number, number];
+  readonly fix: (a: number, b: number, c: any) => [number, number];
   readonly tokenize: (a: number, b: number) => [number, number, number];
   readonly to_monotonic: (a: number, b: number) => [number, number];
   readonly syllabify: (a: number, b: number, c: number, d: number) => [number, number];
