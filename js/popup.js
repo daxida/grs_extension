@@ -65,6 +65,18 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // RULES
+  // Update popup CSS with local storage
+  chrome.storage.local.get('ruleStates', function(result) {
+    const ruleStates = result.ruleStates || DEFAULT_RULE_STATES;
+    Array.from(ruleButtons).forEach(button => {
+      const rule = button.dataset.rule;
+      if (ruleStates[rule] === false) {
+        button.classList.add("inactive");
+      }
+    });
+  });
+
+  // Update popup CSS and local storage when clicking a rule button
   Array.from(ruleButtons).forEach(button => {
     button.addEventListener("click", () => {
       const rule = button.dataset.rule;
