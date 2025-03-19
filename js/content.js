@@ -65,33 +65,59 @@ function highlightNode(node, color, diagnostics) {
   parent.replaceChild(tempElement, node);
 }
 
-function removeHighlights() {
+// https://github.com/brandon1024/find/blob/42806fcc53e8843564ae463e6b246003d3d7a085/content/highlighter.js#L333
+function removeHighlight() {
   document.querySelectorAll(`.${SPAN_CLASS}`).forEach(span => {
-    span.replaceWith(...span.childNodes);
+    let parent = span.parentElement;
+
+    while (span.firstChild) {
+      parent.insertBefore(span.firstChild, span);
+    }
+
+    parent.removeChild(span);
+    parent.normalize();
   });
 }
+
+const ALL_RULES = [
+  "MDA", // MissingDoubleAccents
+  "MAC", // MissingAccentCapital
+  "DW",  // DuplicatedWord
+  "AFN", // AddFinalN
+  "RFN", // RemoveFinalN
+  "OS",  // OutdatedSpelling
+  "MA",  // MonosyllableAccented
+  "MNA", // MultisyllableNotAccented
+  "MS",  // MixedScripts
+  "AC",  // AmbiguousChar
+];
+const DEFAULT_RULE_STATES = Object.fromEntries(ALL_RULES.map(rule => [rule, true]));
 
 async function scanPage() {
   const mod = await loadWasmModule();
   if (!mod) return;
 
-  chrome.storage.local.get("selectedColor", (data) => {
-    const color = data.selectedColor || "#FFFF00"; // Default to yellow if not set
-    scanPageGo(mod, color);
+  chrome.storage.local.get(["selectedColor", "ruleStates"], (data) => {
+    const color = data.selectedColor || "#FFFF00"; // Default to yellow
+    const ruleStates = data.ruleStates || DEFAULT_RULE_STATES; // Default to all true
+    scanPageGo(mod, color, ruleStates);
   });
 }
 
-function scanPageGo(mod, color) {
-  console.log("Running scanPage with color: " + color);
+function scanPageGo(mod, color, ruleStates) {
+  console.log(`Running scanPage with color: ${color}`);
 
   const { scan_text } = mod;
-  const cnt = {};
+  const cnt = new Map();
 
   const iterNode = (node) => {
     try {
-      const diagnostics = scan_text(node.textContent);
+      const diagnostics = scan_text(node.textContent, ruleStates);
       for (const { kind, range, fix } of diagnostics) {
-        cnt[kind] = (cnt[kind] || 0) + 1;
+        if (!cnt.has(kind)) {
+          cnt.set(kind, 0);
+        }
+        cnt.set(kind, cnt.get(kind) + 1);
       }
       if (diagnostics.length > 0) {
         highlightNode(node, color, diagnostics);
@@ -104,7 +130,10 @@ function scanPageGo(mod, color) {
 
   walk(document.body, iterNode);
 
-  console.log("Diagnostics counter: " + JSON.stringify(cnt));
+  const sortedCnt = new Map(
+    [...cnt.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  );
+  console.log("Diagnostic counter", sortedCnt);
 }
 
 async function toMonotonic() {
@@ -123,26 +152,30 @@ function toMonotonicGo(mod) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("Received message:", message);
+  console.log(`[L] Running ${message.action}...`);
 
   switch (message.action) {
     case "runScan":
-      console.log("[L] Running scanPage...");
+      removeHighlight();
       scanPage();
-      sendResponse({ status: "Scan started" });
       break;
 
     case "runToMono":
-      console.log("[L] Running toMonotonicConversion...");
-      removeHighlights();
+      removeHighlight();
       toMonotonic();
       scanPage();
-      sendResponse({ status: "Monotonic conversion started" });
+      break;
+
+    case "setRule":
+      removeHighlight();
+      scanPage();
       break;
 
     default:
       console.warn("[L] Unknown action received:", message.action);
-      sendResponse({ status: "Unknown action" });
   }
+
+  sendResponse({ status: `${message.action} finished` });
 });
 
 console.log("Content script loaded!");
